@@ -2,6 +2,11 @@
 #include "Parser.h"
 #include <string>
 
+// rectangle bound indexes for callers of findRectangleForLetter()
+constexpr int LEFT_X = 0;
+constexpr int TOP_Y = 1;
+constexpr int RIGHT_X = 2;
+constexpr int BOTTOM_Y = 3;
 
 Parser* Parser::instance = nullptr;
 
@@ -39,7 +44,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 	// interprets each line of text
 	for (size_t i = 0; i < lineBounds.size(); i++)
 	{
-		int middleOfLine = (lineBounds.at(i)[1] - lineBounds.at(i)[0]) / 2;
+		int middleOfLine = (lineBounds.at(i)[1] + lineBounds.at(i)[0]) / 2;
 		delete[] lineBounds.at(i);
 
 		// used for adding spaces
@@ -53,17 +58,10 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 			{
 				int* letterBounds = findBoundsOfLetter(x, middleOfLine);
 
-				int letterTopLeftX = letterBounds[0];
-				int letterTopLeftY = letterBounds[1];
-				int letterBottomRightX = letterBounds[2];
-				int letterBottomRightY = letterBounds[3];
+				int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
+				int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];		
 
-				delete[] letterBounds;
-
-				int width = letterBottomRightX - letterTopLeftX;
-				int height = letterTopLeftY - letterBottomRightY;			
-
-				char c = interpretToLetter(letterTopLeftX, letterTopLeftY - height, width, height);
+				char c = interpretToLetter(letterBounds[LEFT_X], letterBounds[BOTTOM_Y], width, height);
 
 				if (c != '\0')
 				{
@@ -75,7 +73,9 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 					lengthForSpace = (width + height) / 2;
 				}		
 
-				x = letterBottomRightX;
+				x = letterBounds[RIGHT_X];
+
+				delete[] letterBounds;
 			}
 
 			if (firstLetterOnLineFound)
@@ -136,15 +136,19 @@ std::vector<int*> Parser::findLineBounds()
 	}
 	lineBounds.push_back(new int[2]{ lineBottom, rowsWithText.at(rowsWithText.size() - 1) });
 
+
+
 	// find average line height
 	int averageLineHeight = 0;
 	for (size_t i = 0; i < lineBounds.size(); i++)
 	{
 		int lineHeight = lineBounds.at(i)[1] - lineBounds.at(i)[0];
 		// squared so that dots of is and js will impact average line heigt less
-		averageLineHeight += lineHeight ^ 2;
+		averageLineHeight += (int)pow(lineHeight, 2);
 	}
 	averageLineHeight = (int)sqrt((double)averageLineHeight / lineBounds.size());
+
+
 
 	// search for dots on is and js and correct line bounds
 	for (size_t i = 0; i < lineBounds.size() - 1; i++)
@@ -152,11 +156,11 @@ std::vector<int*> Parser::findLineBounds()
 		int nextLineHeight = lineBounds.at(i + 1)[1] - lineBounds.at(i + 1)[0];
 		if (nextLineHeight < averageLineHeight / 3)
 		{
-			lineBounds.at(i)[0] = lineBounds.at(i + 1)[0];
 			lineBounds.at(i)[1] = lineBounds.at(i + 1)[1];
 
 			delete[] lineBounds.at(i + 1);
-			lineBounds.erase(lineBounds.begin() + i);
+			lineBounds.erase(lineBounds.begin() + i + 1);
+			i--;
 		}
 	}
 
@@ -166,43 +170,37 @@ std::vector<int*> Parser::findLineBounds()
 // returns bounds of letter in a 4-element array: top left x, top left y, bottom right x, bottom right y
 // called when a black pixel is found while sweeping rows
 // attempts to box each individual letter
-//
-// NOTE: incorrect for lowercase i and j
 int* Parser::findBoundsOfLetter(int x, int y)
 {
-	int* rectangleData = findRectangleForLetter(x, y, x, y);
-
-	if (rectangleData == nullptr)
-	{
-		throw ParsingException();
-	}
+	int* letterRectangle = findRectangleForLetter(x, y, x, y);
 
 	// attempt to find dots on is and js
-	int width = rectangleData[2] - rectangleData[0];
-	int height = rectangleData[1] - rectangleData[3];
+	int width = letterRectangle[RIGHT_X] - letterRectangle[LEFT_X];
+	int height = letterRectangle[TOP_Y] - letterRectangle[BOTTOM_Y];
 	if ((double)height / width > 2.5)
 	{
-		for (int y = 0; y < (int)((double)height / 3); y++)
+		for (int yOffset = 0; yOffset < (int)((double)height / 3); yOffset++)
 		{
-			for (int x = 0; x < width; x++)
+			for (int xOffset = 0; xOffset < width; xOffset++)
 			{
-				int xPos = rectangleData[0] + x;
-				int yPos = rectangleData[3] + y;
+				// searches directly above the shape to find dots
+				int xPos = letterRectangle[LEFT_X] + xOffset;
+				int yPos = letterRectangle[TOP_Y] + yOffset;
 				if (image.positionOccupied(xPos, yPos))
 				{
-					int* potentialDotBounds = findRectangleForLetter(xPos, yPos, xPos, yPos);
+					int* dotBounds = findRectangleForLetter(xPos, yPos, xPos, yPos);
 
-					if (potentialDotBounds != nullptr)
+					if (dotBounds != nullptr)
 					{
-						int dotWidth = potentialDotBounds[2] - potentialDotBounds[0];
-						int dotHeight = potentialDotBounds[1] - potentialDotBounds[3];
+						int dotWidth = dotBounds[RIGHT_X] - dotBounds[LEFT_X];
+						int dotHeight = dotBounds[TOP_Y] - dotBounds[BOTTOM_Y];
 
 						if (dotHeight < (int)((double)height / 3) && dotWidth < (int)((double)height / 3))
 						{
 							// sets new bounds for i or j
-							rectangleData[1] = potentialDotBounds[1];			
-							rectangleData[0] = potentialDotBounds[0];
-							rectangleData[2] = potentialDotBounds[2];
+							letterRectangle[TOP_Y] = dotBounds[TOP_Y];			
+							letterRectangle[LEFT_X] = (int)fmin(letterRectangle[LEFT_X], dotBounds[LEFT_X]);
+							letterRectangle[RIGHT_X] = (int)fmax(letterRectangle[RIGHT_X], dotBounds[RIGHT_X]);
 						}
 					}
 					goto afterDot;
@@ -214,21 +212,21 @@ int* Parser::findBoundsOfLetter(int x, int y)
 	afterDot:
 
 	// removes extra white pixel on border
-	rectangleData[0]++;
-	rectangleData[1]--;
-	rectangleData[2]--;
-	rectangleData[3]++;
+	letterRectangle[LEFT_X]++;
+	letterRectangle[TOP_Y]--;
+	letterRectangle[RIGHT_X]--;
+	letterRectangle[BOTTOM_Y]++;
 
-	return rectangleData;
+	return letterRectangle;
 }
 
 // recursively enlarges searching field and when complete returns array with 4 elements (order of fields) of rectangle containing proper info
-int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX, int bottomRightY)
+int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY)
 {
 	// Prevents infinite recursion
-	if (topLeftX < 0 || topLeftY >= image.getHeight() || bottomRightX >= image.getWidth() || bottomRightY < 0)
+	if (leftX < 0 || topY >= image.getHeight() || rightX >= image.getWidth() || bottomY < 0)
 	{
-		return nullptr;
+		throw ParsingException();
 	}
 
 	bool expandLeft = false;
@@ -237,9 +235,9 @@ int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX
 	bool expandDown = false;
 
 	// checks if left expansion needed
-	for (int y = bottomRightY; y <= topLeftY; y++)
+	for (int y = bottomY; y <= topY; y++)
 	{
-		if (image.positionOccupied(topLeftX, y))
+		if (image.positionOccupied(leftX, y))
 		{
 			expandLeft = true;
 			break;
@@ -247,9 +245,9 @@ int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX
 	}
 
 	// checks if right expansion needed
-	for (int y = bottomRightY; y <= topLeftY; y++)
+	for (int y = bottomY; y <= topY; y++)
 	{
-		if (image.positionOccupied(bottomRightX, y))
+		if (image.positionOccupied(rightX, y))
 		{
 			expandRight = true;
 			break;
@@ -257,9 +255,9 @@ int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX
 	}
 
 	// checks if upward expansion needed
-	for (int x = topLeftX; x <= bottomRightX; x++)
+	for (int x = leftX; x <= rightX; x++)
 	{
-		if (image.positionOccupied(x, topLeftY))
+		if (image.positionOccupied(x, topY))
 		{
 			expandUp = true;
 			break;
@@ -267,9 +265,9 @@ int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX
 	}
 
 	// checks if downward expansion needed
-	for (int x = topLeftX; x <= bottomRightX; x++)
+	for (int x = leftX; x <= rightX; x++)
 	{
-		if (image.positionOccupied(x, bottomRightY))
+		if (image.positionOccupied(x, bottomY))
 		{
 			expandDown = true;
 			break;
@@ -279,31 +277,31 @@ int* Parser::findRectangleForLetter(int topLeftX, int topLeftY, int bottomRightX
 	// correct rectangle
 	if (!(expandRight || expandLeft || expandUp || expandDown))
 	{
-		return new int[4]{ topLeftX, topLeftY, bottomRightX, bottomRightY };
+		return new int[4]{ leftX, topY, rightX, bottomY };
 	}
 
 	// expand rectangle as needed and search again
 	return findRectangleForLetter(
-		topLeftX + (expandLeft ? -1 : 0),
-		topLeftY + (expandUp ? 1 : 0),
-		bottomRightX + (expandRight ? 1 : 0),
-		bottomRightY + (expandDown ? -1 : 0)
+		leftX + (expandLeft ? -1 : 0),
+		topY + (expandUp ? 1 : 0),
+		rightX + (expandRight ? 1 : 0),
+		bottomY + (expandDown ? -1 : 0)
 	);
 }
 
-// attempts to parse a potential letter on the bitmap into a char
-char Parser::interpretToLetter(int topLeftX, int topLeftY, int width, int height)
+// attempts to parse a potential letter on the bitmap into a char by comparing to ComparisonLetters in the 'letters' field
+char Parser::interpretToLetter(int leftX, int bottomY, int width, int height)
 {
-	double greatestSimilarity = 0;
+	double greatestSimilarityPercentage = 0;
 	char mostSimilarLetter = '\0';
 
 	for (int i = 0; i < 52; i++)
 	{
-		double similarity = findSimilarity(i, topLeftX, topLeftY, width, height);
+		double similarity = findPercentSimilar(i, leftX, bottomY, width, height);
 
-		if (similarity > greatestSimilarity)
+		if (similarity > greatestSimilarityPercentage)
 		{
-			greatestSimilarity = similarity;
+			greatestSimilarityPercentage = similarity;
 			mostSimilarLetter = letters[i].getLetter();
 		}
 	}
@@ -311,22 +309,23 @@ char Parser::interpretToLetter(int topLeftX, int topLeftY, int width, int height
 	return mostSimilarLetter;
 }
 
-// compares found letter to ComparisonLetters; returns percentage of matching pixels
-double Parser::findSimilarity(int index, int origX, int origY, int width, int height)
+// compares found letter to ComparisonLetter at given index in 'letters' field; returns percentage of matching pixels
+double Parser::findPercentSimilar(int lettersIndex, int leftX, int bottomY, int width, int height)
 {
 	int pixelMatches = 0;
 	const int area = width * height;
-	for (int y = 0; y < height; y++)
+	for (int yOffset = 0; yOffset < height; yOffset++)
 	{
-		for (int x = 0; x < width; x++)
+		for (int xOffset = 0; xOffset < width; xOffset++)
 		{
-			double letterXDouble = x * ((double)letters[index].getWidth() / width);
-			double letterYDouble = y * ((double)letters[index].getHeight() / height);
+			// finds which pixel in the ComparisonLetter to compare to
+			double letterXDouble = xOffset * ((double)letters[lettersIndex].getWidth() / width);
+			double letterYDouble = yOffset * ((double)letters[lettersIndex].getHeight() / height);
 
 			int letterX = (int)(round(letterXDouble));
 			int letterY = (int)(round(letterYDouble));
 
-			if (image.positionOccupied(origX + x, origY + y) == letters[index].positionOccupied(letterX, letterY))
+			if (image.positionOccupied(leftX + xOffset, bottomY + yOffset) == letters[lettersIndex].positionOccupied(letterX, letterY))
 			{
 				pixelMatches++;
 			}
