@@ -8,6 +8,8 @@ constexpr int TOP_Y = 1;
 constexpr int RIGHT_X = 2;
 constexpr int BOTTOM_Y = 3;
 
+constexpr int DOTTED = 4;
+
 Parser* Parser::instance = nullptr;
 
 Parser::Parser() : image(nullptr), letters{ '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' }
@@ -42,35 +44,34 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 	std::string word;
 	
 	// interprets each line of text
-	for (size_t i = 0; i < lineBounds.size(); i++)
+	for (int i = (int)lineBounds.size() - 1; i >= 0; i--)
 	{
 		int middleOfLine = (lineBounds.at(i)[1] + lineBounds.at(i)[0]) / 2;
 		delete[] lineBounds.at(i);
 
 		// used for adding spaces
 		int pixelsAfterLetter = 0;
-		bool firstLetterOnLineFound = false;
 		int lengthForSpace = 0;
+		int lettersFoundOnLine = 0;
 
 		for (int x = 0; x < image.getWidth(); x++)
 		{
 			if (image.positionOccupied(x, middleOfLine))
 			{
 				int* letterBounds = findBoundsOfLetter(x, middleOfLine);
-
-				int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
-				int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];		
-
-				char c = interpretToLetter(letterBounds[LEFT_X], letterBounds[BOTTOM_Y], width, height);
+				char c = interpretToLetter(letterBounds);
 
 				if (c != '\0')
 				{
 					word += c;
 
-					firstLetterOnLineFound = true;
+					lettersFoundOnLine++;
 					pixelsAfterLetter = 0;
-					// finds reasonable pixel length required to indicate a space
-					lengthForSpace = (width + height) / 2;
+
+					// finds reasonable pixel length required to indicate a space; average among all letters on line
+					int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
+					int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];
+					lengthForSpace = (lengthForSpace * (lettersFoundOnLine - 1) + (width + height) / 2) / lettersFoundOnLine;
 				}		
 
 				x = letterBounds[RIGHT_X];
@@ -78,7 +79,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 				delete[] letterBounds;
 			}
 
-			if (firstLetterOnLineFound)
+			if (lettersFoundOnLine > 0)
 			{
 				pixelsAfterLetter++;
 
@@ -167,19 +168,23 @@ std::vector<int*> Parser::findLineBounds()
 	return lineBounds;
 }
 
-// returns bounds of letter in a 4-element array: top left x, top left y, bottom right x, bottom right y
+// returns bounds of letter in a 5-element array: top left x; top left y; bottom right x; bottom right y;
+//		position 5: 1 if letter with dot (lowercase i or j) and 0 otherwise
+//
 // called when a black pixel is found while sweeping rows
 // attempts to box each individual letter
 int* Parser::findBoundsOfLetter(int x, int y)
 {
-	int* letterRectangle = findRectangleForLetter(x, y, x, y);
+	int* rect = findRectangleForLetter(x, y, x, y);
+	int* letterRectangle = new int[5]{ rect[LEFT_X], rect[TOP_Y], rect[RIGHT_X], rect[BOTTOM_Y], 0 };
+	delete[] rect;
 
 	// attempt to find dots on is and js
-	int width = letterRectangle[RIGHT_X] - letterRectangle[LEFT_X];
-	int height = letterRectangle[TOP_Y] - letterRectangle[BOTTOM_Y];
+	int width = letterRectangle[RIGHT_X] - letterRectangle[LEFT_X] + 1;
+	int height = letterRectangle[TOP_Y] - letterRectangle[BOTTOM_Y] + 1;
 	if ((double)height / width > 2.5)
 	{
-		for (int yOffset = 0; yOffset < (int)((double)height / 3); yOffset++)
+		for (int yOffset = 1; yOffset < (int)((double)height / 3); yOffset++)
 		{
 			for (int xOffset = 0; xOffset < width; xOffset++)
 			{
@@ -192,15 +197,18 @@ int* Parser::findBoundsOfLetter(int x, int y)
 
 					if (dotBounds != nullptr)
 					{
-						int dotWidth = dotBounds[RIGHT_X] - dotBounds[LEFT_X];
-						int dotHeight = dotBounds[TOP_Y] - dotBounds[BOTTOM_Y];
+						int dotWidth = dotBounds[RIGHT_X] - dotBounds[LEFT_X] + 1;
+						int dotHeight = dotBounds[TOP_Y] - dotBounds[BOTTOM_Y] + 1;
 
-						if (dotHeight < (int)((double)height / 3) && dotWidth < (int)((double)height / 3))
+						if (dotHeight < (int)((double)height / 2.5) && dotWidth < (int)((double)height / 2.5))
 						{
 							// sets new bounds for i or j
 							letterRectangle[TOP_Y] = dotBounds[TOP_Y];			
 							letterRectangle[LEFT_X] = (int)fmin(letterRectangle[LEFT_X], dotBounds[LEFT_X]);
 							letterRectangle[RIGHT_X] = (int)fmax(letterRectangle[RIGHT_X], dotBounds[RIGHT_X]);
+
+							// indicates to caller that this is a dotted letter
+							letterRectangle[DOTTED] = 1;
 						}
 					}
 					goto afterDot;
@@ -210,12 +218,6 @@ int* Parser::findBoundsOfLetter(int x, int y)
 	}
 
 	afterDot:
-
-	// removes extra white pixel on border
-	letterRectangle[LEFT_X]++;
-	letterRectangle[TOP_Y]--;
-	letterRectangle[RIGHT_X]--;
-	letterRectangle[BOTTOM_Y]++;
 
 	return letterRectangle;
 }
@@ -274,10 +276,10 @@ int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY
 		}
 	}
 
-	// correct rectangle
+	// correct rectangle, removes extra white pixel on border
 	if (!(expandRight || expandLeft || expandUp || expandDown))
 	{
-		return new int[4]{ leftX, topY, rightX, bottomY };
+		return new int[4]{ leftX + 1, topY - 1, rightX - 1, bottomY + 1 };
 	}
 
 	// expand rectangle as needed and search again
@@ -290,19 +292,23 @@ int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY
 }
 
 // attempts to parse a potential letter on the bitmap into a char by comparing to ComparisonLetters in the 'letters' field
-char Parser::interpretToLetter(int leftX, int bottomY, int width, int height)
+char Parser::interpretToLetter(int* letterBounds)
 {
 	double greatestSimilarityPercentage = 0;
 	char mostSimilarLetter = '\0';
 
 	for (int i = 0; i < 52; i++)
 	{
-		double similarity = findPercentSimilar(i, leftX, bottomY, width, height);
-
-		if (similarity > greatestSimilarityPercentage)
+		// ensures only is and js get checked if letter is dotted
+		if (letters[i].getLetter() == 'i' || letters[i].getLetter() == 'j' || letterBounds[DOTTED] == 0)
 		{
-			greatestSimilarityPercentage = similarity;
-			mostSimilarLetter = letters[i].getLetter();
+			double similarity = findPercentSimilar(i, letterBounds[LEFT_X], letterBounds[BOTTOM_Y], letterBounds[RIGHT_X] - letterBounds[LEFT_X], letterBounds[TOP_Y] - letterBounds[BOTTOM_Y]);
+
+			if (similarity > greatestSimilarityPercentage)
+			{
+				greatestSimilarityPercentage = similarity;
+				mostSimilarLetter = letters[i].getLetter();
+			}
 		}
 	}
 

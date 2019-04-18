@@ -16,7 +16,7 @@ class Parser
 	std::vector<int*> findLineBounds();
 	int* findBoundsOfLetter(int x, int y);
 	int* findRectangleForLetter(int leftX, int topY, int rightX, int bottomY);
-	char interpretToLetter(int leftX, int bottomY, int width, int height);
+	char interpretToLetter(int* letterBounds);
 	double findPercentSimilar(int lettersIndex, int leftX, int bottomY, int width, int height);
 
 public:

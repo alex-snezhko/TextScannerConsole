@@ -10,28 +10,19 @@ void BlackAndWhiteImage::toBlackAndWhite()
 	{
 		for (int x = 0; x < width; x++)
 		{
-			unsigned char* b = &fileData[y][3 * x];
-			unsigned char* g = &fileData[y][3 * x + 1];
-			unsigned char* r = &fileData[y][3 * x + 2];
+			unsigned char b = fileData[y][3 * x];
+			unsigned char g = fileData[y][3 * x + 1];
+			unsigned char r = fileData[y][3 * x + 2];
 
-			int grayVal = (*r + *g + *b) / 3;
-			if (grayVal > 180)
-			{
-				*r = 255;
-				*g = 255;
-				*b = 255;
-			}
-			else
-			{
-				*r = 0;
-				*g = 0;
-				*b = 0;
-			}
+			int grayVal = (r + g + b) / 3;
+
+			// only adjusts 'b' value because that is the only thing checked for in positionOccupied()
+			fileData[y][3 * x] = (grayVal > 180 ? 255 : 0);
 		}
 	}
 }
 
-BlackAndWhiteImage::BlackAndWhiteImage(const char* fileName) : width(0), height(0), size(0)
+BlackAndWhiteImage::BlackAndWhiteImage(const char* fileName) : width(0), height(0)
 {
 	if (fileName != nullptr)
 	{
@@ -64,7 +55,6 @@ void BlackAndWhiteImage::loadBitmap(const char* fileName, bool isBlackAndWhite)
 	const int paddedRowSize = 4 * ((24 * width + 31) / 32);
 
 	bytesToRemove = paddedRowSize - unpaddedRowSize;
-	size = paddedRowSize * height;
 
 	// create grid of (height) x (3 * width)
 	fileData = new unsigned char*[height];
