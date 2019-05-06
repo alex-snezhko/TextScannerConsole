@@ -20,7 +20,7 @@ public:
 	int getWidth() { return width; }
 	int getHeight() { return height; }
 	bool positionOccupied(int x, int y);
-	//void saveToFile(const char* fileName);
+	void saveToFile(const char* fileName);
 	void free();
 };
 

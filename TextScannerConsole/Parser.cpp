@@ -63,6 +63,11 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 
 				if (c != '\0')
 				{
+					if (c == 'I' && (word.empty() || word.at(word.length() - 1) != ' '))
+					{
+						c = 'l';
+					}
+
 					word += c;
 
 					lettersFoundOnLine++;

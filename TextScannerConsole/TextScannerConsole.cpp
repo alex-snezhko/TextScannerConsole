@@ -6,6 +6,7 @@ int main()
 {
 	//BlackAndWhiteImage img("TestFiles/sample_text.bmp");
 	BlackAndWhiteImage img("TestFiles/complex_test.bmp");
+	img.saveToFile("complex_test.bmp");
 
 	//BlackAndWhiteImage img("TestFiles/lowercase_i_and_j_test.bmp");
 	Parser* instance = Parser::getInstance();

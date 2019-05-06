@@ -17,7 +17,7 @@ void BlackAndWhiteImage::toBlackAndWhite()
 			int grayVal = (r + g + b) / 3;
 
 			// only adjusts 'b' value because that is the only thing checked for in positionOccupied()
-			fileData[y][3 * x] = (grayVal > 180 ? 255 : 0);
+			fileData[y][3 * x] = (grayVal > 160 ? 255 : 0);
 		}
 	}
 }
@@ -99,9 +99,9 @@ void BlackAndWhiteImage::free()
 	delete[] fileData;
 }
 
-/*void BlackAndWhiteImage::saveToFile(const char* fileName)
+void BlackAndWhiteImage::saveToFile(const char* fileName)
 {
-	std::string name = "BWLetters/BW";
+	std::string name = "TestFiles/BW";
 	name.append(fileName);
 
 	std::ofstream myFile(name.c_str(), std::ios::out | std::ios::trunc);
@@ -113,8 +113,8 @@ void BlackAndWhiteImage::free()
 	{
 		for (int j = 0; j < 3 * width + bytesToRemove; j++)
 		{
-			myFile << fileData[i][j];
+			myFile << fileData[i][j - j % 3];
 		}
 	}
 	myFile.close();
-}*/
+}
