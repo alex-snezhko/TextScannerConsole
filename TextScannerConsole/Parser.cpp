@@ -39,7 +39,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 {
 	this->image = image;
 
-	std::vector<int*> lineBounds = findLineBounds();
+	std::vector<int*> lineBounds = findTextLines();
 
 	std::string word;
 	
@@ -103,7 +103,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 }
 
 // vector of arrays; [0] = bottom y of single line of text, [1] = top y of single line of text
-std::vector<int*> Parser::findLineBounds()
+std::vector<int*> Parser::findTextLines()
 {
 	// finds bitmap rows with text on them
 	std::vector<int> rowsWithText;
@@ -180,7 +180,7 @@ std::vector<int*> Parser::findLineBounds()
 // attempts to box each individual letter
 int* Parser::findBoundsOfLetter(int x, int y)
 {
-	int* rect = findRectangleForLetter(x, y, x, y);
+	int* rect = findRectangleForShape(x, y, x, y);
 	int* letterRectangle = new int[5]{ rect[LEFT_X], rect[TOP_Y], rect[RIGHT_X], rect[BOTTOM_Y], 0 };
 	delete[] rect;
 
@@ -198,7 +198,7 @@ int* Parser::findBoundsOfLetter(int x, int y)
 				int yPos = letterRectangle[TOP_Y] + yOffset;
 				if (image.positionOccupied(xPos, yPos))
 				{
-					int* dotBounds = findRectangleForLetter(xPos, yPos, xPos, yPos);
+					int* dotBounds = findRectangleForShape(xPos, yPos, xPos, yPos);
 
 					if (dotBounds != nullptr)
 					{
@@ -228,7 +228,7 @@ int* Parser::findBoundsOfLetter(int x, int y)
 }
 
 // recursively enlarges searching field and when complete returns array with 4 elements (order of fields) of rectangle containing proper info
-int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY)
+int* Parser::findRectangleForShape(int leftX, int topY, int rightX, int bottomY)
 {
 	// Prevents infinite recursion
 	if (leftX < 0 || topY >= image.getHeight() || rightX >= image.getWidth() || bottomY < 0)
@@ -241,42 +241,40 @@ int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY
 	bool expandUp = false;
 	bool expandDown = false;
 
-	// checks if left expansion needed
+	// checks if left/right expansion needed
 	for (int y = bottomY; y <= topY; y++)
 	{
 		if (image.positionOccupied(leftX, y))
 		{
 			expandLeft = true;
-			break;
 		}
-	}
 
-	// checks if right expansion needed
-	for (int y = bottomY; y <= topY; y++)
-	{
 		if (image.positionOccupied(rightX, y))
 		{
 			expandRight = true;
+		}
+
+		if (expandLeft && expandRight)
+		{
 			break;
 		}
 	}
 
-	// checks if upward expansion needed
+	// checks if up/downward expansion needed
 	for (int x = leftX; x <= rightX; x++)
 	{
 		if (image.positionOccupied(x, topY))
 		{
 			expandUp = true;
-			break;
 		}
-	}
 
-	// checks if downward expansion needed
-	for (int x = leftX; x <= rightX; x++)
-	{
 		if (image.positionOccupied(x, bottomY))
 		{
 			expandDown = true;
+		}
+
+		if (expandUp && expandDown)
+		{
 			break;
 		}
 	}
@@ -288,7 +286,7 @@ int* Parser::findRectangleForLetter(int leftX, int topY, int rightX, int bottomY
 	}
 
 	// expand rectangle as needed and search again
-	return findRectangleForLetter(
+	return findRectangleForShape(
 		leftX + (expandLeft ? -1 : 0),
 		topY + (expandUp ? 1 : 0),
 		rightX + (expandRight ? 1 : 0),
@@ -305,9 +303,9 @@ char Parser::interpretToLetter(int* letterBounds)
 	for (int i = 0; i < 52; i++)
 	{
 		// ensures only is and js get checked if letter is dotted
-		if (letters[i].getLetter() == 'i' || letters[i].getLetter() == 'j' || letterBounds[DOTTED] == 0)
+		if (letterBounds[DOTTED] == 0 || letters[i].getLetter() == 'i' || letters[i].getLetter() == 'j')
 		{
-			double similarity = findPercentSimilar(i, letterBounds[LEFT_X], letterBounds[BOTTOM_Y], letterBounds[RIGHT_X] - letterBounds[LEFT_X], letterBounds[TOP_Y] - letterBounds[BOTTOM_Y]);
+			double similarity = findPercentSimilar(i, letterBounds[LEFT_X], letterBounds[BOTTOM_Y], letterBounds[RIGHT_X] - letterBounds[LEFT_X] + 1, letterBounds[TOP_Y] - letterBounds[BOTTOM_Y] + 1);
 
 			if (similarity > greatestSimilarityPercentage)
 			{
@@ -321,22 +319,21 @@ char Parser::interpretToLetter(int* letterBounds)
 }
 
 // compares found letter to ComparisonLetter at given index in 'letters' field; returns percentage of matching pixels
-double Parser::findPercentSimilar(int lettersIndex, int leftX, int bottomY, int width, int height)
+double Parser::findPercentSimilar(int comparisonLetterIndex, int leftX, int bottomY, int width, int height)
 {
 	int pixelMatches = 0;
 	const int area = width * height;
+
+	// pixel at (x, y) on letter in image being parsed
 	for (int yOffset = 0; yOffset < height; yOffset++)
 	{
 		for (int xOffset = 0; xOffset < width; xOffset++)
 		{
-			// finds which pixel in the ComparisonLetter to compare to
-			double letterXDouble = xOffset * ((double)letters[lettersIndex].getWidth() / width);
-			double letterYDouble = yOffset * ((double)letters[lettersIndex].getHeight() / height);
+			// compares pixels by geometric center of each pixel in letter being parsed, hence the 0.5 finds the center of the pixel
+			int comparisonX = (int)((xOffset + 0.5) * ((double)letters[comparisonLetterIndex].getWidth() / width));
+			int comparisonY = (int)((yOffset + 0.5) * ((double)letters[comparisonLetterIndex].getHeight() / height));
 
-			int letterX = (int)(round(letterXDouble));
-			int letterY = (int)(round(letterYDouble));
-
-			if (image.positionOccupied(leftX + xOffset, bottomY + yOffset) == letters[lettersIndex].positionOccupied(letterX, letterY))
+			if (image.positionOccupied(leftX + xOffset, bottomY + yOffset) == letters[comparisonLetterIndex].positionOccupied(comparisonX, comparisonY))
 			{
 				pixelMatches++;
 			}
