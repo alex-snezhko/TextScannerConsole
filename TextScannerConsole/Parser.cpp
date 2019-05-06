@@ -14,6 +14,7 @@ Parser* Parser::instance = nullptr;
 
 Parser::Parser() : image(nullptr), letters{ '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' }
 {
+	// loads all alphabetic letters into parser from images
 	for (int i = 0; i < 52; i++)
 	{
 		char letter = 'A';
@@ -28,6 +29,7 @@ Parser::Parser() : image(nullptr), letters{ '\0', '\0', '\0', '\0', '\0', '\0', 
 
 Parser* Parser::getInstance()
 {
+	// singleton pattern
 	if (instance == nullptr)
 	{
 		instance = new Parser();
@@ -39,6 +41,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 {
 	this->image = image;
 
+	// finds text lines in image
 	std::vector<int*> lineBounds = findTextLines();
 
 	std::string word;
@@ -56,6 +59,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 
 		for (int x = 0; x < image.getWidth(); x++)
 		{
+			// attempts to parse into letter if black pixel is found
 			if (image.positionOccupied(x, middleOfLine))
 			{
 				int* letterBounds = findBoundsOfLetter(x, middleOfLine);
@@ -63,6 +67,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 
 				if (c != '\0')
 				{
+					// attempts to solve issue of I and l having almost identical appearance in calibri
 					if (c == 'I' && (word.empty() || word.at(word.length() - 1) != ' '))
 					{
 						c = 'l';
@@ -74,20 +79,23 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 					pixelsAfterLetter = 0;
 
 					// finds reasonable pixel length required to indicate a space; average among all letters on line
-					int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
-					int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];
+					const int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
+					const int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];
 					lengthForSpace = (lengthForSpace * (lettersFoundOnLine - 1) + (width + height) / 2) / lettersFoundOnLine;
 				}		
 
+				// moves scanner to right after the scanned pixels
 				x = letterBounds[RIGHT_X];
 
 				delete[] letterBounds;
 			}
 
+			// for adding spaces
 			if (lettersFoundOnLine > 0)
 			{
 				pixelsAfterLetter++;
 
+				// adds a space to the word if there is a lot of space in between letters
 				if (pixelsAfterLetter == lengthForSpace)
 				{
 					word += ' ';
@@ -95,6 +103,7 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 			}
 		}
 
+		// adds new line character after reaching the end of a line in the image
 		word += '\n';
 	}
 
