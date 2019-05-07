@@ -14,8 +14,10 @@ class Parser
 	Parser();
 
 	std::vector<int*> findTextLines();
+
 	int* findBoundsOfLetter(int x, int y);
 	int* findRectangleForShape(int leftX, int topY, int rightX, int bottomY);
+
 	char interpretToLetter(int* letterBounds);
 	double findPercentSimilar(int comparisonLetterIndex, int leftX, int bottomY, int width, int height);
 

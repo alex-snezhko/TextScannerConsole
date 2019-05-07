@@ -324,6 +324,12 @@ char Parser::interpretToLetter(int* letterBounds)
 		}
 	}
 
+	// if image in bounds too dissimilar to any letter, return null character
+	if (greatestSimilarityPercentage < 70)
+	{
+		return '\0';
+	}
+
 	return mostSimilarLetter;
 }
 
@@ -349,5 +355,5 @@ double Parser::findPercentSimilar(int comparisonLetterIndex, int leftX, int bott
 		}
 	}
 
-	return (double)pixelMatches / area;
+	return ((double)pixelMatches / area) * 100;
 }
