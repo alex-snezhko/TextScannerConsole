@@ -49,9 +49,6 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 	// interprets each line of text
 	for (int i = (int)lineBounds.size() - 1; i >= 0; i--)
 	{
-		int middleOfLine = (lineBounds.at(i)[1] + lineBounds.at(i)[0]) / 2;
-		delete[] lineBounds.at(i);
-
 		// used for adding spaces
 		int pixelsAfterLetter = 0;
 		int lengthForSpace = 0;
@@ -59,35 +56,40 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 
 		for (int x = 0; x < image.getWidth(); x++)
 		{
-			// attempts to parse into letter if black pixel is found
-			if (image.positionOccupied(x, middleOfLine))
+			for (int y = lineBounds.at(i)[0]; y < lineBounds.at(i)[1]; y++)
 			{
-				int* letterBounds = findBoundsOfLetter(x, middleOfLine);
-				char c = interpretToLetter(letterBounds);
-
-				if (c != '\0')
+				// attempts to parse into letter if black pixel is found
+				if (image.positionOccupied(x, y))
 				{
-					// attempts to solve issue of I and l having almost identical appearance in calibri
-					if (c == 'I' && (word.empty() || word.at(word.length() - 1) != ' '))
+					int* letterBounds = findBoundsOfLetter(x, y);
+					char c = interpretToLetter(letterBounds);
+
+					if (c != '\0')
 					{
-						c = 'l';
+						// attempts to solve issue of I and l having almost identical appearance in calibri
+						if (c == 'I' && (word.empty() || word.at(word.length() - 1) != ' '))
+						{
+							c = 'l';
+						}
+
+						word += c;
+
+						lettersFoundOnLine++;
+						pixelsAfterLetter = 0;
+
+						// finds reasonable pixel length required to indicate a space; average among all letters on line
+						const int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X] + 1;
+						const int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y] + 1;
+						lengthForSpace = (int)((lengthForSpace * (lettersFoundOnLine - 1) + (width + height) / 3) / lettersFoundOnLine);
 					}
 
-					word += c;
+					// moves scanner to right after the scanned pixels
+					x = letterBounds[RIGHT_X];
 
-					lettersFoundOnLine++;
-					pixelsAfterLetter = 0;
+					delete[] letterBounds;
 
-					// finds reasonable pixel length required to indicate a space; average among all letters on line
-					const int width = letterBounds[RIGHT_X] - letterBounds[LEFT_X];
-					const int height = letterBounds[TOP_Y] - letterBounds[BOTTOM_Y];
-					lengthForSpace = (lengthForSpace * (lettersFoundOnLine - 1) + (width + height) / 2) / lettersFoundOnLine;
-				}		
-
-				// moves scanner to right after the scanned pixels
-				x = letterBounds[RIGHT_X];
-
-				delete[] letterBounds;
+					break;
+				}
 			}
 
 			// for adding spaces
@@ -105,6 +107,8 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 
 		// adds new line character after reaching the end of a line in the image
 		word += '\n';
+
+		delete[] lineBounds.at(i);
 	}
 
 	image.free();
@@ -239,6 +243,73 @@ int* Parser::findBoundsOfLetter(int x, int y)
 // recursively enlarges searching field and when complete returns array with 4 elements (order of fields) of rectangle containing proper info
 int* Parser::findRectangleForShape(int leftX, int topY, int rightX, int bottomY)
 {
+	/*int* correctBounds = new int[4];
+	correctBounds[LEFT_X] = correctBounds[RIGHT_X] = originalBounds[LEFT_X];
+	correctBounds[TOP_Y] = originalBounds[TOP_Y];
+	correctBounds[BOTTOM_Y] = originalBounds[BOTTOM_Y];
+
+	for (int x = originalBounds[LEFT_X]; x < originalBounds[RIGHT_X]; x++)
+	{
+		for (int y = originalBounds[BOTTOM_Y]; y <= originalBounds[TOP_Y]; y++)
+		{
+			// checks if there is a pixel directly to the right or rightward diagonal to current pixel
+			bool(*isPixel)(int, int) = image.positionOccupied;
+			if (isPixel(x, y) && (isPixel(x + 1, y) || isPixel(x + 1, y + 1) || isPixel(x + 1, y - 1)))
+			{
+				correctBounds[RIGHT_X] = x + 1;
+
+				x++;
+				y = originalBounds[BOTTOM_Y];
+				break;
+			}
+
+			// break if no pixel in column fulfills prior condition ^
+			if (y == originalBounds[TOP_Y])
+			{
+				goto exitCheck;
+			}
+		}
+	}
+
+	exitCheck:
+
+	// trim off whitespace from top
+	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
+	{
+		if (image.positionOccupied(x, correctBounds[TOP_Y]))
+		{
+			break;
+		}
+
+		if (x == correctBounds[RIGHT_X])
+		{
+			correctBounds[TOP_Y] = correctBounds[TOP_Y] - 1;
+			x = correctBounds[LEFT_X];
+		}
+	}
+
+	// trim off whitespace from bottom
+	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
+	{
+		if (image.positionOccupied(x, correctBounds[BOTTOM_Y]))
+		{
+			break;
+		}
+
+		if (x == correctBounds[RIGHT_X])
+		{
+			correctBounds[BOTTOM_Y] = correctBounds[BOTTOM_Y] + 1;
+			x = correctBounds[LEFT_X];
+		}
+	}
+
+	delete[] originalBounds;
+	originalBounds = correctBounds;*/
+
+
+
+
+
 	// Prevents infinite recursion
 	if (leftX < 0 || topY >= image.getHeight() || rightX >= image.getWidth() || bottomY < 0)
 	{
@@ -327,7 +398,7 @@ char Parser::interpretToLetter(int* letterBounds)
 	// if image in bounds too dissimilar to any letter, return null character
 	if (greatestSimilarityPercentage < 80)
 	{
-		correctLetterBounds(letterBounds);
+		//correctLetterBounds(letterBounds);
 		return '\0';
 	}
 
@@ -361,7 +432,7 @@ double Parser::findPercentSimilar(int comparisonLetterIndex, int leftX, int bott
 
 // corrects bounds to try to find individual letter in the case that 2+ letters get formed into one
 //
-// probably make this the original bounds algorithm with the line bounds being passed in as parameter
+// TODO probably make this the original bounds algorithm with the line bounds being passed in as parameter
 //
 //
 void Parser::correctLetterBounds(int* originalBounds)
@@ -375,9 +446,8 @@ void Parser::correctLetterBounds(int* originalBounds)
 	{
 		for (int y = originalBounds[BOTTOM_Y]; y <= originalBounds[TOP_Y]; y++)
 		{	
-			// checks if there is a pixel directly to the right or rightward diagonal to current pixel
-			bool (*isPixel)(int, int) = image.positionOccupied;		
-			if (isPixel(x, y) && (isPixel(x + 1, y) || isPixel(x + 1, y + 1) || isPixel(x + 1, y - 1)))
+			// checks if there is a pixel directly to the right or rightward diagonal to current pixel	
+			if (image.positionOccupied(x, y) && (image.positionOccupied(x + 1, y) || image.positionOccupied(x + 1, y + 1) || image.positionOccupied(x + 1, y - 1)))
 			{
 				correctBounds[RIGHT_X] = x + 1;
 
