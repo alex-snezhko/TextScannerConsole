@@ -325,8 +325,9 @@ char Parser::interpretToLetter(int* letterBounds)
 	}
 
 	// if image in bounds too dissimilar to any letter, return null character
-	if (greatestSimilarityPercentage < 70)
+	if (greatestSimilarityPercentage < 80)
 	{
+		correctLetterBounds(letterBounds);
 		return '\0';
 	}
 
@@ -356,4 +357,75 @@ double Parser::findPercentSimilar(int comparisonLetterIndex, int leftX, int bott
 	}
 
 	return ((double)pixelMatches / area) * 100;
+}
+
+// corrects bounds to try to find individual letter in the case that 2+ letters get formed into one
+//
+// probably make this the original bounds algorithm with the line bounds being passed in as parameter
+//
+//
+void Parser::correctLetterBounds(int* originalBounds)
+{
+	int* correctBounds = new int[4];
+	correctBounds[LEFT_X] = correctBounds[RIGHT_X] = originalBounds[LEFT_X];
+	correctBounds[TOP_Y] = originalBounds[TOP_Y];
+	correctBounds[BOTTOM_Y] = originalBounds[BOTTOM_Y];
+
+	for (int x = originalBounds[LEFT_X]; x < originalBounds[RIGHT_X]; x++)
+	{
+		for (int y = originalBounds[BOTTOM_Y]; y <= originalBounds[TOP_Y]; y++)
+		{	
+			// checks if there is a pixel directly to the right or rightward diagonal to current pixel
+			bool (*isPixel)(int, int) = image.positionOccupied;		
+			if (isPixel(x, y) && (isPixel(x + 1, y) || isPixel(x + 1, y + 1) || isPixel(x + 1, y - 1)))
+			{
+				correctBounds[RIGHT_X] = x + 1;
+
+				x++;
+				y = originalBounds[BOTTOM_Y];
+				break;
+			}
+
+			// break if no pixel in column fulfills prior condition ^
+			if (y == originalBounds[TOP_Y])
+			{
+				goto exitCheck;
+			}
+		}
+	}
+
+	exitCheck:
+
+	// trim off whitespace from top
+	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
+	{
+		if (image.positionOccupied(x, correctBounds[TOP_Y]))
+		{
+			break;
+		}
+
+		if (x == correctBounds[RIGHT_X])
+		{
+			correctBounds[TOP_Y] = correctBounds[TOP_Y] - 1;
+			x = correctBounds[LEFT_X];
+		}
+	}
+
+	// trim off whitespace from bottom
+	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
+	{
+		if (image.positionOccupied(x, correctBounds[BOTTOM_Y]))
+		{
+			break;
+		}
+
+		if (x == correctBounds[RIGHT_X])
+		{
+			correctBounds[BOTTOM_Y] = correctBounds[BOTTOM_Y] + 1;
+			x = correctBounds[LEFT_X];
+		}
+	}
+
+	delete[] originalBounds;
+	originalBounds = correctBounds;
 }

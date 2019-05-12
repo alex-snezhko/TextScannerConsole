@@ -21,6 +21,8 @@ class Parser
 	char interpretToLetter(int* letterBounds);
 	double findPercentSimilar(int comparisonLetterIndex, int leftX, int bottomY, int width, int height);
 
+	void correctLetterBounds(int* originalBounds);
+
 public:
 	static Parser* getInstance();
 
