@@ -2,13 +2,15 @@
 #include "Parser.h"
 #include <string>
 
-// rectangle bound indexes for callers of findRectangleForLetter()
+// rectangle bound indexes for callers of findLetterBounds()
 constexpr int LEFT_X = 0;
 constexpr int TOP_Y = 1;
 constexpr int RIGHT_X = 2;
 constexpr int BOTTOM_Y = 3;
 
-constexpr int DOTTED = 4;
+// line bound indexes for findTextLines()
+constexpr int LINE_BOTTOM_Y = 0;
+constexpr int LINE_TOP_Y = 1;
 
 Parser* Parser::instance = nullptr;
 
@@ -54,14 +56,15 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 		int lengthForSpace = 0;
 		int lettersFoundOnLine = 0;
 
+		// sweeps each column of pixels in line bounds from bottom to top of column and left to right to find black pixel
 		for (int x = 0; x < image.getWidth(); x++)
 		{
-			for (int y = lineBounds.at(i)[0]; y < lineBounds.at(i)[1]; y++)
+			for (int y = lineBounds.at(i)[LINE_BOTTOM_Y]; y < lineBounds.at(i)[LINE_TOP_Y]; y++)
 			{
 				// attempts to parse into letter if black pixel is found
 				if (image.positionOccupied(x, y))
 				{
-					int* letterBounds = findBoundsOfLetter(x, y);
+					int* letterBounds = findLetterBounds(x, lineBounds.at(i)[LINE_BOTTOM_Y], lineBounds.at(i)[LINE_TOP_Y]);
 					char c = interpretToLetter(letterBounds);
 
 					if (c != '\0')
@@ -115,7 +118,8 @@ std::string Parser::scanImage(BlackAndWhiteImage image)
 	return word;
 }
 
-// vector of arrays; [0] = bottom y of single line of text, [1] = top y of single line of text
+// returns the y-bounds of each line of text in the image as a vector of arrays
+// each element of vector: [0] = bottom y of single line of text, [1] = top y of single line of text
 std::vector<int*> Parser::findTextLines()
 {
 	// finds bitmap rows with text on them
@@ -161,7 +165,7 @@ std::vector<int*> Parser::findTextLines()
 	int averageLineHeight = 0;
 	for (size_t i = 0; i < lineBounds.size(); i++)
 	{
-		int lineHeight = lineBounds.at(i)[1] - lineBounds.at(i)[0];
+		int lineHeight = lineBounds.at(i)[LINE_TOP_Y] - lineBounds.at(i)[LINE_BOTTOM_Y];
 		// squared so that dots of is and js will impact average line heigt less
 		averageLineHeight += (int)pow(lineHeight, 2);
 	}
@@ -172,10 +176,10 @@ std::vector<int*> Parser::findTextLines()
 	// search for dots on is and js and correct line bounds
 	for (size_t i = 0; i < lineBounds.size() - 1; i++)
 	{
-		int nextLineHeight = lineBounds.at(i + 1)[1] - lineBounds.at(i + 1)[0];
+		int nextLineHeight = lineBounds.at(i + 1)[LINE_TOP_Y] - lineBounds.at(i + 1)[LINE_BOTTOM_Y];
 		if (nextLineHeight < averageLineHeight / 3)
 		{
-			lineBounds.at(i)[1] = lineBounds.at(i + 1)[1];
+			lineBounds.at(i)[LINE_TOP_Y] = lineBounds.at(i + 1)[LINE_TOP_Y];
 
 			delete[] lineBounds.at(i + 1);
 			lineBounds.erase(lineBounds.begin() + i + 1);
@@ -186,85 +190,37 @@ std::vector<int*> Parser::findTextLines()
 	return lineBounds;
 }
 
-// returns bounds of letter in a 5-element array: top left x; top left y; bottom right x; bottom right y;
-//		position 5: 1 if letter with dot (lowercase i or j) and 0 otherwise
+// finds proper bounds of letter in a 4-element array: [0] = left x, [1] = top y, [2] = right x, [3] = bottom y
 //
-// called when a black pixel is found while sweeping rows
-// attempts to box each individual letter
-int* Parser::findBoundsOfLetter(int x, int y)
+// TODO: this only works if no letters overlap in the same column
+int* Parser::findLetterBounds(int leftX, int lineBottomY, int lineTopY)
 {
-	int* rect = findRectangleForShape(x, y, x, y);
-	int* letterRectangle = new int[5]{ rect[LEFT_X], rect[TOP_Y], rect[RIGHT_X], rect[BOTTOM_Y], 0 };
-	delete[] rect;
+	// initializes bounds as first column of pixels
+	int* correctBounds = new int[4];
+	correctBounds[LEFT_X] = correctBounds[RIGHT_X] = leftX;
+	correctBounds[TOP_Y] = lineTopY;
+	correctBounds[BOTTOM_Y] = lineBottomY;
 
-	// attempt to find dots on is and js
-	int width = letterRectangle[RIGHT_X] - letterRectangle[LEFT_X] + 1;
-	int height = letterRectangle[TOP_Y] - letterRectangle[BOTTOM_Y] + 1;
-	if ((double)height / width > 2.5)
+	for (int x = leftX; x < image.getWidth(); x++)
 	{
-		for (int yOffset = 1; yOffset < (int)((double)height / 3); yOffset++)
+		// edge case
+		if (x == image.getWidth() - 1)
 		{
-			for (int xOffset = 0; xOffset < width; xOffset++)
-			{
-				// searches directly above the shape to find dots
-				int xPos = letterRectangle[LEFT_X] + xOffset;
-				int yPos = letterRectangle[TOP_Y] + yOffset;
-				if (image.positionOccupied(xPos, yPos))
-				{
-					int* dotBounds = findRectangleForShape(xPos, yPos, xPos, yPos);
-
-					if (dotBounds != nullptr)
-					{
-						int dotWidth = dotBounds[RIGHT_X] - dotBounds[LEFT_X] + 1;
-						int dotHeight = dotBounds[TOP_Y] - dotBounds[BOTTOM_Y] + 1;
-
-						if (dotHeight < (int)((double)height / 2.5) && dotWidth < (int)((double)height / 2.5))
-						{
-							// sets new bounds for i or j
-							letterRectangle[TOP_Y] = dotBounds[TOP_Y];			
-							letterRectangle[LEFT_X] = (int)fmin(letterRectangle[LEFT_X], dotBounds[LEFT_X]);
-							letterRectangle[RIGHT_X] = (int)fmax(letterRectangle[RIGHT_X], dotBounds[RIGHT_X]);
-
-							// indicates to caller that this is a dotted letter
-							letterRectangle[DOTTED] = 1;
-						}
-					}
-					goto afterDot;
-				}
-			}
+			correctBounds[RIGHT_X] = x;
+			break;
 		}
-	}
 
-	afterDot:
-
-	return letterRectangle;
-}
-
-// recursively enlarges searching field and when complete returns array with 4 elements (order of fields) of rectangle containing proper info
-int* Parser::findRectangleForShape(int leftX, int topY, int rightX, int bottomY)
-{
-	/*int* correctBounds = new int[4];
-	correctBounds[LEFT_X] = correctBounds[RIGHT_X] = originalBounds[LEFT_X];
-	correctBounds[TOP_Y] = originalBounds[TOP_Y];
-	correctBounds[BOTTOM_Y] = originalBounds[BOTTOM_Y];
-
-	for (int x = originalBounds[LEFT_X]; x < originalBounds[RIGHT_X]; x++)
-	{
-		for (int y = originalBounds[BOTTOM_Y]; y <= originalBounds[TOP_Y]; y++)
+		for (int y = lineBottomY; y <= lineTopY; y++)
 		{
 			// checks if there is a pixel directly to the right or rightward diagonal to current pixel
-			bool(*isPixel)(int, int) = image.positionOccupied;
-			if (isPixel(x, y) && (isPixel(x + 1, y) || isPixel(x + 1, y + 1) || isPixel(x + 1, y - 1)))
+			if (image.positionOccupied(x, y) && (image.positionOccupied(x + 1, y) || image.positionOccupied(x + 1, y + 1) || image.positionOccupied(x + 1, y - 1)))
 			{
 				correctBounds[RIGHT_X] = x + 1;
-
-				x++;
-				y = originalBounds[BOTTOM_Y];
 				break;
 			}
 
-			// break if no pixel in column fulfills prior condition ^
-			if (y == originalBounds[TOP_Y])
+			// break out of nested loop if no pixel in column fulfills prior condition ^
+			if (y == lineTopY)
 			{
 				goto exitCheck;
 			}
@@ -303,78 +259,10 @@ int* Parser::findRectangleForShape(int leftX, int topY, int rightX, int bottomY)
 		}
 	}
 
-	delete[] originalBounds;
-	originalBounds = correctBounds;*/
-
-
-
-
-
-	// Prevents infinite recursion
-	if (leftX < 0 || topY >= image.getHeight() || rightX >= image.getWidth() || bottomY < 0)
-	{
-		throw ParsingException();
-	}
-
-	bool expandLeft = false;
-	bool expandRight = false;
-	bool expandUp = false;
-	bool expandDown = false;
-
-	// checks if left/right expansion needed
-	for (int y = bottomY; y <= topY; y++)
-	{
-		if (image.positionOccupied(leftX, y))
-		{
-			expandLeft = true;
-		}
-
-		if (image.positionOccupied(rightX, y))
-		{
-			expandRight = true;
-		}
-
-		if (expandLeft && expandRight)
-		{
-			break;
-		}
-	}
-
-	// checks if up/downward expansion needed
-	for (int x = leftX; x <= rightX; x++)
-	{
-		if (image.positionOccupied(x, topY))
-		{
-			expandUp = true;
-		}
-
-		if (image.positionOccupied(x, bottomY))
-		{
-			expandDown = true;
-		}
-
-		if (expandUp && expandDown)
-		{
-			break;
-		}
-	}
-
-	// correct rectangle, removes extra white pixel on border
-	if (!(expandRight || expandLeft || expandUp || expandDown))
-	{
-		return new int[4]{ leftX + 1, topY - 1, rightX - 1, bottomY + 1 };
-	}
-
-	// expand rectangle as needed and search again
-	return findRectangleForShape(
-		leftX + (expandLeft ? -1 : 0),
-		topY + (expandUp ? 1 : 0),
-		rightX + (expandRight ? 1 : 0),
-		bottomY + (expandDown ? -1 : 0)
-	);
+	return correctBounds;
 }
 
-// attempts to parse a potential letter on the bitmap into a char by comparing to ComparisonLetters in the 'letters' field
+// attempts to parse a potential letter on the bitmap into a char by comparing to all ComparisonLetters in the 'letters' field
 char Parser::interpretToLetter(int* letterBounds)
 {
 	double greatestSimilarityPercentage = 0;
@@ -382,23 +270,18 @@ char Parser::interpretToLetter(int* letterBounds)
 
 	for (int i = 0; i < 52; i++)
 	{
-		// ensures only is and js get checked if letter is dotted
-		if (letterBounds[DOTTED] == 0 || letters[i].getLetter() == 'i' || letters[i].getLetter() == 'j')
-		{
-			double similarity = findPercentSimilar(i, letterBounds[LEFT_X], letterBounds[BOTTOM_Y], letterBounds[RIGHT_X] - letterBounds[LEFT_X] + 1, letterBounds[TOP_Y] - letterBounds[BOTTOM_Y] + 1);
+		double similarity = findPercentSimilar(i, letterBounds[LEFT_X], letterBounds[BOTTOM_Y], letterBounds[RIGHT_X] - letterBounds[LEFT_X] + 1, letterBounds[TOP_Y] - letterBounds[BOTTOM_Y] + 1);
 
-			if (similarity > greatestSimilarityPercentage)
-			{
-				greatestSimilarityPercentage = similarity;
-				mostSimilarLetter = letters[i].getLetter();
-			}
-		}
+		if (similarity > greatestSimilarityPercentage)
+		{
+			greatestSimilarityPercentage = similarity;
+			mostSimilarLetter = letters[i].getLetter();
+		}	
 	}
 
 	// if image in bounds too dissimilar to any letter, return null character
 	if (greatestSimilarityPercentage < 80)
 	{
-		//correctLetterBounds(letterBounds);
 		return '\0';
 	}
 
@@ -428,74 +311,4 @@ double Parser::findPercentSimilar(int comparisonLetterIndex, int leftX, int bott
 	}
 
 	return ((double)pixelMatches / area) * 100;
-}
-
-// corrects bounds to try to find individual letter in the case that 2+ letters get formed into one
-//
-// TODO probably make this the original bounds algorithm with the line bounds being passed in as parameter
-//
-//
-void Parser::correctLetterBounds(int* originalBounds)
-{
-	int* correctBounds = new int[4];
-	correctBounds[LEFT_X] = correctBounds[RIGHT_X] = originalBounds[LEFT_X];
-	correctBounds[TOP_Y] = originalBounds[TOP_Y];
-	correctBounds[BOTTOM_Y] = originalBounds[BOTTOM_Y];
-
-	for (int x = originalBounds[LEFT_X]; x < originalBounds[RIGHT_X]; x++)
-	{
-		for (int y = originalBounds[BOTTOM_Y]; y <= originalBounds[TOP_Y]; y++)
-		{	
-			// checks if there is a pixel directly to the right or rightward diagonal to current pixel	
-			if (image.positionOccupied(x, y) && (image.positionOccupied(x + 1, y) || image.positionOccupied(x + 1, y + 1) || image.positionOccupied(x + 1, y - 1)))
-			{
-				correctBounds[RIGHT_X] = x + 1;
-
-				x++;
-				y = originalBounds[BOTTOM_Y];
-				break;
-			}
-
-			// break if no pixel in column fulfills prior condition ^
-			if (y == originalBounds[TOP_Y])
-			{
-				goto exitCheck;
-			}
-		}
-	}
-
-	exitCheck:
-
-	// trim off whitespace from top
-	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
-	{
-		if (image.positionOccupied(x, correctBounds[TOP_Y]))
-		{
-			break;
-		}
-
-		if (x == correctBounds[RIGHT_X])
-		{
-			correctBounds[TOP_Y] = correctBounds[TOP_Y] - 1;
-			x = correctBounds[LEFT_X];
-		}
-	}
-
-	// trim off whitespace from bottom
-	for (int x = correctBounds[LEFT_X]; x <= correctBounds[RIGHT_X]; x++)
-	{
-		if (image.positionOccupied(x, correctBounds[BOTTOM_Y]))
-		{
-			break;
-		}
-
-		if (x == correctBounds[RIGHT_X])
-		{
-			correctBounds[BOTTOM_Y] = correctBounds[BOTTOM_Y] + 1;
-			x = correctBounds[LEFT_X];
-		}
-	}
-
-	delete[] originalBounds;
-	originalBounds = correctBounds;
 }
