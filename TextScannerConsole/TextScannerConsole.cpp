@@ -4,11 +4,12 @@
 
 int main()
 {
-	//BlackAndWhiteImage img("TestFiles/sample_text.bmp");
-	BlackAndWhiteImage img("TestFiles/complex_test.bmp");
-	img.saveToFile("complex_test.bmp");
+	BlackAndWhiteImage img("TestFiles/sample_text.bmp");
+	//BlackAndWhiteImage img("sample_image_3.bmp");
+	img.saveToFile("BW_sample_text.bmp");
+	//img.saveToFile("complex_test.bmp");
 
 	//BlackAndWhiteImage img("TestFiles/lowercase_i_and_j_test.bmp");
-	Parser* instance = Parser::getInstance();
-	std::cout << instance->scanImage(img).c_str();
+	//Parser* instance = Parser::getInstance();
+	//std::cout << instance->scanImage(img).c_str();
 }

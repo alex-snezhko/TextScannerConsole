@@ -14,21 +14,6 @@ constexpr int LINE_TOP_Y = 1;
 
 Parser* Parser::instance = nullptr;
 
-Parser::Parser() : image(nullptr), letters{ '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' }
-{
-	// loads all alphabetic letters into parser from images
-	for (int i = 0; i < 52; i++)
-	{
-		char letter = 'A';
-		letter += i;
-		if (letter >= 91)
-		{
-			letter += 6;
-		}
-		letters[i] = ComparisonLetter(letter);
-	}
-}
-
 Parser* Parser::getInstance()
 {
 	// singleton pattern

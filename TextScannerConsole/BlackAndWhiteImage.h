@@ -9,7 +9,7 @@ class BlackAndWhiteImage
 	unsigned char headerData[HEADER_SIZE];
 	unsigned char** fileData;
 
-	void toBlackAndWhite();
+	bool** positionBlack;
 
 protected:
 	void loadBitmap(const char* fileName, bool isBlackAndWhite = false);
