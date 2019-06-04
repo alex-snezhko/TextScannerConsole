@@ -13,7 +13,6 @@ BlackAndWhiteImage::BlackAndWhiteImage(const char* fileName)
 void BlackAndWhiteImage::loadBitmap(const char* fileName, bool isBlackAndWhite)
 {
 	FILE* file;
-
 	fopen_s(&file, fileName, "rb");
 	if (file == nullptr)
 	{
@@ -121,10 +120,12 @@ void BlackAndWhiteImage::free()
 void BlackAndWhiteImage::saveToFile(const char* fileName)
 {
 	std::ofstream myFile(fileName, std::ios::out | std::ios::trunc);
+
 	for (int i = 0; i < headerSize; i++)
 	{
 		myFile << headerData[i];
 	}
+
 	for (int y = 0; y < getHeight(); y++)
 	{
 		for (int x = 0; x < getWidth(); x++)
@@ -137,5 +138,6 @@ void BlackAndWhiteImage::saveToFile(const char* fileName)
 			myFile << '\0';
 		}
 	}
+
 	myFile.close();
 }

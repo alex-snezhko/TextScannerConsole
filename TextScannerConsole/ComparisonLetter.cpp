@@ -4,6 +4,7 @@
 
 ComparisonLetter::ComparisonLetter(char letter) : BlackAndWhiteImage(nullptr)
 {
+	// collects data from bmp file
 	this->letter = letter;
 	std::string fileName = "BWLetters/";
 	if (letter >= 97 && letter <= 122)
@@ -25,6 +26,7 @@ ComparisonLetter::ComparisonLetter(char letter) : BlackAndWhiteImage(nullptr)
 	loadBitmap(fileName.c_str(), true);
 }
 
+// gets the letter which this ComparisonImage represents
 char ComparisonLetter::getLetter()
 {
 	return letter;
